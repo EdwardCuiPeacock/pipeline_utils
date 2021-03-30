@@ -11,7 +11,6 @@ done
 DIR="$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )"
 
 recipe__init(){
-    echo $DIR
     command python "$DIR/recipe_init.py" "$@"
 }
 
