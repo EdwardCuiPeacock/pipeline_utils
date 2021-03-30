@@ -1,0 +1,4 @@
+tfx==0.26.0
+kfp==1.0.0
+gcsfs==0.7.2
+avro-json-serializer==1.0.3

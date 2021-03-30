@@ -1,0 +1,56 @@
+# This file sets up the environment variables of the job run
+pipeline_name: template
+pipeline_version: "0_0_0" # must be in  this format
+description: |
+  This optional field is used to describe the job run.
+system_configurations:
+  GCS_BUCKET_NAME: 
+    description: Google Cloud Storage bucket name
+    type: string
+    value: "gs://edc-dev/kubeflowpipelines-default"
+  GOOGLE_CLOUD_REGION:
+    description: Region to use GCP services including BigQuery, 
+      Dataflow and Cloud AI Platform.
+    type: string
+    value: us-east1
+  GOOGLE_CLOUD_PROJECT:
+    description: Google cloud project name
+    type: string
+    value: res-nbcupea-dev-ds-sandbox-001
+  ENDPOINT:
+    description: Google Cloud Endpoint
+    type: string
+    value: df6bc4688870067-dot-us-east1.pipelines.googleusercontent.com
+  PREPROCESSING_FN:
+    description: Import path to the preprocessing function relative to the working directory 
+    type: string
+    value: models.preprocessing.preprocessing_fn
+  KUBEFLOW_RUNNER:
+    description: Kubeflow runner .py script to use
+    type: string
+    value: kubeflow_runner.py
+  TFX_IMAGE_REPO_NAME:
+    description: Name of the repository on Container Registry, gcr.io/{GOOGLE_CLOUD_PROJECT}/{TFX_IMAGE_REPO_NAME}
+    type: string
+    value: tfx-pipeline
+model_configurations:
+  RUN_FN: 
+    description: Import path to the model run function relative to the working directory
+    type: string
+    value: models.keras.model.run_fn
+  TRAIN_NUM_STEPS: 
+    description: Number of training steps
+    type: int
+    value: 1000
+  EVAL_NUM_STEPS: 
+    description: Number of evaluation steps
+    type: int
+    value: 150
+  EVAL_ACCURACY_THRESHOLD:
+    description: Evaluation accuracy threshold
+    type: float
+    value: 0.6
+  query_sample_rate: 
+    description: Random sample rate
+    type: float
+    value: 0.0001
