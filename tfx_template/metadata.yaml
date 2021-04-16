@@ -85,6 +85,10 @@ system_configurations:
     description: Kubeflow runner .py script to use
     type: string
     value: kubeflow_runner.py
+  RUNNER_TYPE:
+    description: Runner type to use, "kubeflow", "kubeflowv2", "local"
+    type: string
+    value: local
   enable_cache:
     description: Whether or not to enable caching of execution results
     type: boolean
