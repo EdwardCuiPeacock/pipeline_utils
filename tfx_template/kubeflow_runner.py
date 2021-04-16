@@ -5,40 +5,18 @@ from __future__ import print_function
 
 import os
 from absl import logging
+from typing import Text, Optional
 
-from pipeline import configs
-from pipeline import pipeline
+
 from tfx.orchestration.kubeflow import kubeflow_dag_runner
 from tfx.proto import trainer_pb2
 from tfx.utils import telemetry_utils
 
-# TFX pipeline produces many output files and metadata. All output data will be
-# stored under this OUTPUT_DIR.
-OUTPUT_DIR = os.path.join("gs://", configs.GCS_BUCKET_NAME)
-
-# TFX produces two types of outputs, files and metadata.
-# - Files will be created under PIPELINE_ROOT directory.
-PIPELINE_ROOT = os.path.join(OUTPUT_DIR, "tfx_pipeline_output", configs.PIPELINE_NAME)
-
-# The last component of the pipeline, "Pusher" will produce serving model under
-# SERVING_MODEL_DIR.
-SERVING_MODEL_DIR = os.path.join(PIPELINE_ROOT, "serving_model")
-
-# Specifies data file directory. DATA_PATH should be a directory containing CSV
-# files for CsvExampleGen in this example. By default, data files are in the
-# GCS path: `gs://{GCS_BUCKET_NAME}/tfx-template/data/`. Using a GCS path is
-# recommended for KFP.
-#
-# One can optionally choose to use a data source located inside of the container
-# built by the template, by specifying
-# DATA_PATH = 'data'. Note that Dataflow does not support use container as a
-# dependency currently, so this means CsvExampleGen cannot be used with Dataflow
-# (step 8 in the template notebook).
-
-DATA_PATH = "gs://{}/tfx-template/data/taxi/".format(configs.GCS_BUCKET_NAME)
+from utils.metadata_utils import get_metadata, get_config
+from pipeline import pipeline
 
 
-def run():
+def run(metadata_file: Optional[Text] = None):
     """Define a kubeflow pipeline."""
 
     # Metadata config. The defaults works work with the installation of
@@ -48,43 +26,59 @@ def run():
     # Kubeflow cluster.
     metadata_config = kubeflow_dag_runner.get_default_kubeflow_metadata_config()
 
+    # Load settings from metadata.yaml
+    metadata = get_metadata(metadata_file)
+    system_config = get_config(metadata, "system_configurations")
+    model_config = get_config(metadata, "model_configurations")
+
     # This pipeline automatically injects the Kubeflow TFX image if the
     # environment variable 'KUBEFLOW_TFX_IMAGE' is defined. Currently, the tfx
     # cli tool exports the environment variable to pass to the pipelines.
     # TODO(b/157598477) Find a better way to pass parameters from CLI handler to
     # pipeline DSL file, instead of using environment vars.
     tfx_image = os.environ.get("KUBEFLOW_TFX_IMAGE", None)
+    logging.info(f"Current tfx image used: {tfx_image}")
 
     runner_config = kubeflow_dag_runner.KubeflowDagRunnerConfig(
         kubeflow_metadata_config=metadata_config, tfx_image=tfx_image
     )
     pod_labels = kubeflow_dag_runner.get_default_pod_labels()
-    pod_labels.update({telemetry_utils.LABEL_KFP_SDK_ENV: "tfx-template"})
+    pod_labels.update(
+        {
+            telemetry_utils.LABEL_KFP_SDK_ENV: metadata["pipeline_name"]
+            + "_"
+            + metadata["pipeline_version"]
+        }
+    )
     kubeflow_dag_runner.KubeflowDagRunner(
         config=runner_config, pod_labels_to_attach=pod_labels
     ).run(
         pipeline.create_pipeline(
-            pipeline_name=configs.PIPELINE_NAME,
-            pipeline_root=PIPELINE_ROOT,
-            data_path=DATA_PATH,
+            pipeline_name=metadata["pipeline_name"]
+            + "_"
+            + metadata["pipeline_version"],
+            pipeline_root=system_config["PIPELINE_ROOT"],
+            data_path=model_config["data_path"],
             # TODO(step 7): (Optional) Uncomment below to use BigQueryExampleGen.
-            # query=configs.BIG_QUERY_QUERY,
-            preprocessing_fn=configs.PREPROCESSING_FN,
-            run_fn=configs.RUN_FN,
-            train_args=trainer_pb2.TrainArgs(num_steps=configs.TRAIN_NUM_STEPS),
-            eval_args=trainer_pb2.EvalArgs(num_steps=configs.EVAL_NUM_STEPS),
-            eval_accuracy_threshold=configs.EVAL_ACCURACY_THRESHOLD,
-            serving_model_dir=SERVING_MODEL_DIR,
+            # query=model_config["query_script_path"],
+            preprocessing_fn=system_config["preprocessing_fn"],
+            run_fn=system_config["run_fn"],
+            train_args=trainer_pb2.TrainArgs(num_steps=model_config["TRAIN_NUM_STEPS"]),
+            eval_args=trainer_pb2.EvalArgs(num_steps=model_config["EVAL_NUM_STEPS"]),
+            eval_accuracy_threshold=model_config["EVAL_ACCURACY_THRESHOLD"],
+            serving_model_dir=system_config["MODEL_SERVE_DIR"],
             # TODO(step 7): (Optional) Uncomment below to use provide GCP related
             #               config for BigQuery with Beam DirectRunner.
-            # beam_pipeline_args=configs
-            # .BIG_QUERY_WITH_DIRECT_RUNNER_BEAM_PIPELINE_ARGS,
+            # beam_pipeline_args=system_config["BIG_QUERY_WITH_DIRECT_RUNNER_BEAM_PIPELINE_ARGS"]
             # TODO(step 8): (Optional) Uncomment below to use Dataflow.
-            # beam_pipeline_args=configs.DATAFLOW_BEAM_PIPELINE_ARGS,
+            # beam_pipeline_args=system_config["DATAFLOW_BEAM_PIPELINE_ARGS"],
             # TODO(step 9): (Optional) Uncomment below to use Cloud AI Platform.
-            # ai_platform_training_args=configs.GCP_AI_PLATFORM_TRAINING_ARGS,
+            # ai_platform_training_args=system_config["GCP_AI_PLATFORM_TRAINING_ARGS"],
             # TODO(step 9): (Optional) Uncomment below to use Cloud AI Platform.
-            # ai_platform_serving_args=configs.GCP_AI_PLATFORM_SERVING_ARGS,
+            # ai_platform_serving_args=system_configs["GCP_AI_PLATFORM_SERVING_ARGS"],
+            enable_cache=system_config["enable_cache"],
+            system_config=system_config,  # passing config parameters downstream
+            model_config=model_config,  # passing model parameters downstream
         )
     )
 

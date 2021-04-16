@@ -2,15 +2,17 @@
 pipeline_name: template
 pipeline_version: "0_0_0" # must be in  this format
 description: |
-  This optional field is used to describe the job run.
+  This pipeline runs the node2vec model on TFX with tensorflow / Keras
+  system_configuration: All fields are required for the pipeline to run properly
+  model_configuration: Additional custom arguments exposed to the model.
+  For strings, array of strings,or object (dict) fields, Jinja2 templating is supported.
 system_configurations:
   GCS_BUCKET_NAME: 
-    description: Google Cloud Storage bucket name
+    description: Google Cloud Storage bucket name to store pipeline outputs
     type: string
-    value: "gs://edc-dev/kubeflowpipelines-default"
+    value: "gs://{{ GOOGLE_CLOUD_PROJECT }}-kubeflowpipelines-default"
   GOOGLE_CLOUD_REGION:
-    description: Region to use GCP services including BigQuery, 
-      Dataflow and Cloud AI Platform.
+    description: Region to use GCP services including BigQuery, Dataflow and Cloud AI Platform.
     type: string
     value: us-east1
   GOOGLE_CLOUD_PROJECT:
@@ -21,23 +23,93 @@ system_configurations:
     description: Google Cloud Endpoint
     type: string
     value: df6bc4688870067-dot-us-east1.pipelines.googleusercontent.com
-  PREPROCESSING_FN:
-    description: Import path to the preprocessing function relative to the working directory 
+  TFX_IMAGE:
+    description: |
+      Name of the repository on Container Registry.
     type: string
-    value: models.preprocessing.preprocessing_fn
+    value: "gcr.io/{{ GOOGLE_CLOUD_PROJECT }}/tfx-pipeline"
+  PIPELINE_ROOT:
+    description: |
+      TFX produces two types of outputs, files and metadata.
+      Files will be created under PIPELINE_ROOT directory.
+    type: string
+    value: "{{ GCS_BUCKET_NAME }}/tfx_pipeline_output/{{ pipeline_name }}_{{ pipeline_version }}"
+  MODEL_SERVE_DIR:
+    description: |
+      The last component of the pipeline, Pusher will produce serving 
+      model under model_serve_dir.
+    type: string
+    value: "{{ PIPELINE_ROOT }}/serving_model"
+  DATAFLOW_BEAM_PIPELINE_ARGS:
+    description: |
+      Settings for beam pipeline. Needed for bigquery. 
+    type: object
+    value:
+      project: "{{ GOOGLE_CLOUD_PROJECT }}"
+      runner: "DataflowRunner"
+      temp_location: "{{ GCS_BUCKET_NAME }}/tmp"
+      region: "{{ GOOGLE_CLOUD_REGION }}"
+      disk_size_gb: 50
+      machine_type: e2-standard-8
+  BIG_QUERY_WITH_DIRECT_RUNNER_BEAM_PIPELINE_ARGS:
+    description: Settings for BigQuery with Beam DirectRunner.
+    type: object
+    value:
+      project: "{{ GOOGLE_CLOUD_PROJECT }}"
+      temp_location: "{{ GCS_BUCKET_NAME }}/tmp"
+  GCP_AI_PLATFORM_TRAINING_ARGS:
+    description: GCP AI platform settings for training. For GPU usage, see guides at https://cloud.google.com/ai-platform/training/docs/using-gpus
+    type: object
+    value:
+      project: "{{ GOOGLE_CLOUD_PROJECT }}"
+      region:  us-east4
+      scaleTier: CUSTOM
+      masterType: n1-highmem-16
+      masterConfig:
+        imageUri: "gcr.io/{{ GOOGLE_CLOUD_PROJECT }}/tfx-pipeline"
+        acceleratorConfig:
+          count: 1
+          type: NVIDIA_TESLA_P4
+  GCP_AI_PLATFORM_SERVING_ARGS:
+    description: GCP AI platform settings for serving.
+    type: object
+    value: 
+      model_name: "{{ pipeline_name }}_{{ pipeline_version }}"  # '-' is not allowed.
+      project_id: "{{ GOOGLE_CLOUD_PROJECT }}"
+      # The region to use when serving the model. See available regions here:
+      # https://cloud.google.com/ml-engine/docs/regions
+      # Note that serving currently only supports a single region:
+      # https://cloud.google.com/ml-engine/reference/rest/v1/projects.models#Model
+      regions: "{{ GOOGLE_CLOUD_REGION }}"
   KUBEFLOW_RUNNER:
     description: Kubeflow runner .py script to use
     type: string
     value: kubeflow_runner.py
-  TFX_IMAGE_REPO_NAME:
-    description: Name of the repository on Container Registry, gcr.io/{GOOGLE_CLOUD_PROJECT}/{TFX_IMAGE_REPO_NAME}
+  enable_cache:
+    description: Whether or not to enable caching of execution results
+    type: boolean
+    value: True
+  enable_gpc_ai_platform_training:
+    description: Whether or not to enable GPU training with GCP AI Platform
+    type: boolean
+    value: False
+  preprocessing_fn:
+    description: Import path to the preprocessing function relative to the project directory
     type: string
-    value: tfx-pipeline
+    value: models.preprocessing.preprocessing_fn
+  run_fn:
+    description: Import path to the model run function relative to the project directory
+    type: string
+    value: models.node2vec.model.run_fn
 model_configurations:
-  RUN_FN: 
-    description: Import path to the model run function relative to the working directory
+  data_path:
+    description: Path to csv data
     type: string
-    value: models.keras.model.run_fn
+    value: "{{ GCS_BUCKET_NAME }}/tfx-template/data/taxi/"
+  query_script_path:
+    description: Path to BigQuery script, relative to the project directory
+    type: string
+    value: data/data.sql
   TRAIN_NUM_STEPS: 
     description: Number of training steps
     type: int

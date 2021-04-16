@@ -1,14 +1,6 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Tue Mar 16 11:33:59 2021
+"""Pipeline Running Utilities. DO NOT MOVE!"""
 
-Recipe utilities
-
-@author: edwardcui
-"""
-import os
-import subprocess
+mport os
 import pathlib
 from typing import Dict, List, Text, Optional
 import yaml
@@ -88,34 +80,6 @@ def parse_templated_fields(metadata: Dict) -> Dict:
     return metadata
 
 
-
-
-def run_shell_command(command, verbose=True):
-    """Run a command and get the outputs."""
-    process = subprocess.Popen(command, 
-        stdout=subprocess.PIPE, 
-        stderr=subprocess.STDOUT,
-        encoding="utf-8", 
-        errors="replace")
-
-    cached_output = []
-    
-    while True: # print progress real time
-        output = process.stdout.readline()
-        if output == '' and process.poll() is not None:
-            break
-
-        if output and verbose:
-            print(output.strip(), flush=True)
-
-        # save output
-        cached_output.append(output.strip())
-    
-    cached_output = os.linesep.join(cached_output)
-
-    return process.returncode, cached_output
-    
-
 if __name__ == '__main__':
-    metadata = yaml.safe_load(open("tfx_template/metadata.yaml", "r"))
-    config = get_config(metadata)
+    metadata = get_metadata()
+    yaml.dump(metadata, open("test.yaml", "w"))

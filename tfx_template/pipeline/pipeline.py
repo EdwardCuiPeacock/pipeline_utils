@@ -4,6 +4,8 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import re
+import datetime
 from typing import Any, Dict, List, Optional, Text
 
 import tensorflow_model_analysis as tfma
@@ -38,6 +40,8 @@ from tfx.utils.dsl_utils import external_input
 
 from ml_metadata.proto import metadata_store_pb2
 
+from utils.query_utils import load_query_string
+
 
 def create_pipeline(
     pipeline_name: Text,
@@ -55,6 +59,9 @@ def create_pipeline(
     beam_pipeline_args: Optional[List[Text]] = None,
     ai_platform_training_args: Optional[Dict[Text, Text]] = None,
     ai_platform_serving_args: Optional[Dict[Text, Any]] = None,
+    enable_cache: Optional[bool] = False,
+    system_config: Optional[Dict[Text, Any]] = None,
+    model_config: Optional[Dict[Text, Any]] = None,
 ) -> pipeline.Pipeline:
     """Implements the chicago taxi pipeline with TFX."""
 
@@ -63,6 +70,14 @@ def create_pipeline(
     # Brings data into the pipeline or otherwise joins/converts training data.
     example_gen = CsvExampleGen(input=external_input(data_path))
     # TODO(step 7): (Optional) Uncomment here to use BigQuery as a data source.
+    # # ExampleGen: Load the graph data from bigquery
+    # query_str = load_query_string(
+    #     query,
+    #     field_dict={
+    #         "GOOGLE_CLOUD_PROJECT": system_config["GOOGLE_CLOUD_PROJECT"],
+    #         "query_sample_rate": model_config["query_sample_rate"],
+    #     },
+    # )
     # example_gen = big_query_example_gen_component.BigQueryExampleGen(
     #     query=query)
     components.append(example_gen)
@@ -104,21 +119,32 @@ def create_pipeline(
         "transform_graph": transform.outputs["transform_graph"],
         "train_args": train_args,
         "eval_args": eval_args,
+        "custom_config": {"model_config": model_config, "system_config": system_config},
         "custom_executor_spec": executor_spec.ExecutorClassSpec(
             trainer_executor.GenericExecutor
         ),
     }
     if ai_platform_training_args is not None:
-        trainer_args.update(
-            {
-                "custom_executor_spec": executor_spec.ExecutorClassSpec(
-                    ai_platform_trainer_executor.GenericExecutor
-                ),
-                "custom_config": {
-                    ai_platform_trainer_executor.TRAINING_ARGS_KEY: ai_platform_training_args,
-                },
-            }
+        trainer_args["custom_executor_spec"] = executor_spec.ExecutorClassSpec(
+            ai_platform_trainer_executor.GenericExecutor
         )
+
+        trainer_args["custom_config"][
+            ai_platform_trainer_executor.TRAINING_ARGS_KEY
+        ] = ai_platform_training_args
+
+        # Lowercase and replace illegal characters in labels.
+        # This is the job ID that will be shown in the platform
+        # See https://cloud.google.com/compute/docs/naming-resources.
+        trainer_args["custom_config"][
+            ai_platform_trainer_executor.JOB_ID_KEY
+        ] = "tfx_{}_{}".format(
+            re.sub(r"[^a-z0-9\_]", "_", pipeline_name.lower()),
+            datetime.datetime.now().strftime("%Y%m%d%H%M%S"),
+        )[
+            -63:
+        ]
+
     trainer = Trainer(**trainer_args)
     # TODO(step 6): Uncomment here to add Trainer to the pipeline.
     # components.append(trainer)
@@ -197,9 +223,11 @@ def create_pipeline(
         pipeline_name=pipeline_name,
         pipeline_root=pipeline_root,
         components=components,
-        # Change this value to control caching of execution results. Default value
-        # is `False`.
-        # enable_cache=True,
+        enable_cache=enable_cache,
         metadata_connection_config=metadata_connection_config,
-        beam_pipeline_args=beam_pipeline_args,
+        beam_pipeline_args=(  # parse beam pipeline into a list of commands
+            [f"--{key}={val}" for key, val in beam_pipeline_args.items()]
+            if beam_pipeline_args is not None
+            else None
+        ),
     )

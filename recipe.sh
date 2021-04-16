@@ -20,8 +20,8 @@ recipe__taste(){
         echo "Please provide the path to metadata.yaml file"
         return 1
     fi
-
     echo "Taste recipe with $1."
+    command python "$DIR/recipe_taste.py" "$@"
 }
 
 recipe__test(){

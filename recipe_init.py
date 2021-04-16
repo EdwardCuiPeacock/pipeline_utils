@@ -95,7 +95,8 @@ def recipe_init(pipeline_name="my_pipeline", project_dir=".", pipeline_type="tfx
         The default is tfx
     """
     # directories
-    source_dir = os.path.join(os.path.dirname(__file__), f"{pipeline_type}_template")
+    base_dir = os.path.dirname(__file__)
+    source_dir = os.path.join(base_dir, f"{pipeline_type}_template")
     target_dir = os.path.realpath(
         os.path.abspath(os.path.join(project_dir, pipeline_name))
     )
@@ -103,10 +104,16 @@ def recipe_init(pipeline_name="my_pipeline", project_dir=".", pipeline_type="tfx
     # Copy the template folder
     if not os.path.isdir(target_dir):
         shutil.copytree(source_dir, target_dir, dirs_exist_ok=True)
+        
+        # Copy over the metadata util
+        shutil.copyfile(
+            os.path.join(base_dir, "utils", "recipe_utils.py"),
+            os.path.join(project_dir, "utils", "metadata_utils.py"),
+        )
     else:
         print("Pipeline folder exists.")
 
-    # Change the pipeline name in the global variable in `config.py` file
+    # Change the pipeline name in the global variable in `metadata.yaml` file
     config_filepath = os.path.join(target_dir, "metadata.yaml")
     with open(config_filepath, "r") as forig:
         script_data = forig.read()  # read everything
@@ -119,15 +126,19 @@ def recipe_init(pipeline_name="my_pipeline", project_dir=".", pipeline_type="tfx
         fnew.write(script_data)
 
     # For TFX pipeline, also download the skaffold bin
-    if pipeline_type == "tfx" and not os.path.isfile(os.path.join(target_dir, "bin", "skaffold")):
+    if pipeline_type == "tfx" and not os.path.isfile(
+        os.path.join(target_dir, "bin", "skaffold")
+    ):
         print("Downloading 'skaffold'")
         save_path = os.path.join(target_dir, "bin")
         os.makedirs(save_path, exist_ok=True)
-        urllib.request.urlretrieve("https://storage.googleapis.com/skaffold/releases/latest/skaffold-linux-amd64",
-            os.path.join(save_path, "skaffold")
+        urllib.request.urlretrieve(
+            "https://storage.googleapis.com/skaffold/releases/latest/skaffold-linux-amd64",
+            os.path.join(save_path, "skaffold"),
         )
 
-    print(f"Successfully initialized {pipeline_type.upper()} pipeline recipe.")    
+    print(f"Successfully initialized {pipeline_type.upper()} pipeline recipe.")
+
 
 if __name__ == "__main__":
     args = parser.parse_args()

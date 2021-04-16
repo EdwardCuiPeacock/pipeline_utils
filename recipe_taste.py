@@ -120,13 +120,13 @@ def taste_zenml_recipe(metadata_yaml, update=False):
     pass
 
 
-if __name__ == "__main__":
+def test_taste_tfx_recipe():
     metadata_yaml = (
         "/Users/edwardcui/Documents/Scripts/pipeline_utils/tfx_template/metadata.yaml"
     )
     taste_tfx_recipe(metadata_yaml)
 
-if __name__ == "__main__2":
+if __name__ == "__main__":
     args = parser.parse_args()
     print(args.__dict__)
     if args.pipeline_type == "tfx":
